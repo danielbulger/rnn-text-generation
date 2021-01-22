@@ -139,6 +139,8 @@ def main():
                 print('[%d,%d] loss: %.6f' % (epoch, index, running_loss / args.batch_size))
                 running_loss = 0.0
 
+    checkpoint(model, args.log_dir, "final.pth")
+
 
 if __name__ == '__main__':
     main()
