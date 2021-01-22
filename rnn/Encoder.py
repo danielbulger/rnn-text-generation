@@ -28,7 +28,7 @@ class Encoder(nn.Module):
         embedding = self.embedding(x)
     
         rnn1, (hidden1, context1) = self.rnn1(embedding, (prev_state1[0], prev_state1[1]))
-        rnn2, (hidden2, context2) = self.rnn2(rnn1, (prev_state2[0], prev_state2[0]))
+        rnn2, (hidden2, context2) = self.rnn2(rnn1, (prev_state2[0], prev_state2[1]))
 
         embedding = embedding.transpose(0, 1)[-1]
         rnn1 = rnn1.transpose(0, 1)[-1]
