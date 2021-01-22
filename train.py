@@ -98,6 +98,15 @@ def main():
 
         running_loss = 0.0
 
+        state_hidden1, state_context1 = model.zero_state(args.batch_size, args.rnn1_size) 
+        state_hidden2, state_context2 = model.zero_state(args.batch_size, args.rnn2_size)
+
+        state_hidden1.to(device)
+        state_context1.to(device)
+
+        state_hidden2.to(device)
+        state_context2.to(device)
+
         for index, (train, labels) in enumerate(data_loader):
 
             labels = labels.float()
@@ -107,8 +116,15 @@ def main():
                 labels = labels.to(device)
 
             optimiser.zero_grad()
-            predict = model(train)
+            predict, state1, state2 = model(train, (state_hidden1, state_context1), (state_hidden2, state_context2))
             loss = mse(predict, labels)
+
+            state_hidden1 = state1[0].detach()
+            state_context1 = state1[1].detach()
+
+            state_hidden2 = state2[0].detach()
+            state_context2 = state2[1].detach()
+
             loss.backward()
 
             # Prevent exploding gradients

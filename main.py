@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 
 import torch
+import numpy as np
 
 from rnn.CharDataset import make_one_hot
 
@@ -42,6 +43,16 @@ def main():
 
     output = [args.start]
 
+    state_hidden1, state_context1 = model.zero_state(1, model.rnn1_hidden_size)
+    state_hidden2, state_context2 = model.zero_state(1, model.rnn2.hidden_size)
+
+    state_hidden1 = state_hidden1.to(device)
+    state_context1 = state_context1.to(device)
+
+    state_hidden2 = state_hidden2.to(device)
+    state_context2 = state_context2.to(device)
+
+
     for x in range(args.count):
         # Stack as we need a batch dimension of 1
         current = torch.stack([make_one_hot(vocab_size, character_index[output[-1]])])
@@ -50,13 +61,18 @@ def main():
             current = current.to(device)
 
         # The soft-max probabilities
-        prediction = model(current)
+        prediction, (state_hidden1, state_context1), (state_hidden2, state_context2) = model(current, (state_hidden1, state_context1), (state_hidden2, state_context2))
 
-        # The argmax of the prediction
-        index = prediction.cpu().argmax(1)
+
+        # Sample from the top N most probable predictions.
+        _, top_index = torch.topk(prediction, k=10)
+        choices = top_index.tolist()
+
+        # Grab one at random.
+        choice = np.random.choice(choices[0])
 
         # Convert the probabilities to the character
-        character = characters[index]
+        character = characters[choice]
 
         output.append(character)
 
