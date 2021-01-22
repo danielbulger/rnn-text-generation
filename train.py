@@ -1,10 +1,13 @@
 import os
 from argparse import ArgumentParser
 
+import pickle
 import torch
 import torch.utils.data
-from torch.nn import MSELoss
-from torch.optim.rmsprop import RMSprop
+import multiprocessing
+
+import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
 
 from rnn.CharDataset import CharDataset
 from rnn.Encoder import Encoder
@@ -40,7 +43,6 @@ def checkpoint(model, directory, file):
 
 
 def write_chars(file, vocab_size, characters, character_index):
-    import pickle
     with open(file, 'wb') as output_file:
         data = {
             'count': vocab_size,
@@ -56,39 +58,28 @@ def main():
 
     # If the number of workers wasn't set, use all available ones
     if args.workers is None:
-        import multiprocessing
         args.workers = multiprocessing.cpu_count()
 
-    use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda' if use_cuda else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     content, vocab_size, characters, character_index = get_chars(args.input)
 
     # Write the required training data to file.
     write_chars(
-        args.chars,
-        vocab_size,
-        characters,
-        character_index
+        args.chars, vocab_size, characters, character_index
     )
 
     # The generation model.
     model = Encoder(
-        device,
-        vocab_size,
-        args.embedding_size,
-        args.rnn1_size,
-        args.rnn2_size
+        vocab_size, args.embedding_size,  args.rnn1_size, args.rnn2_size
     )
 
-    if use_cuda:
-        model = model.to(device)
+    model = model.to(device)
 
-    optimiser = RMSprop(model.parameters(), lr=args.lr)
-    mse = MSELoss()
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     data_loader = torch.utils.data.DataLoader(
-        CharDataset(vocab_size, content, character_index),
+        CharDataset(args.batch_size, vocab_size, content, character_index),
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers
@@ -101,23 +92,21 @@ def main():
         state_hidden1, state_context1 = model.zero_state(args.batch_size, args.rnn1_size) 
         state_hidden2, state_context2 = model.zero_state(args.batch_size, args.rnn2_size)
 
-        state_hidden1.to(device)
-        state_context1.to(device)
+        state_hidden1 = state_hidden1.to(device)
+        state_context1 = state_context1.to(device)
 
-        state_hidden2.to(device)
-        state_context2.to(device)
+        state_hidden2 = state_hidden2.to(device)
+        state_context2 = state_context2.to(device)
 
         for index, (train, labels) in enumerate(data_loader):
 
-            labels = labels.float()
-
-            if use_cuda:
-                train = train.to(device)
-                labels = labels.to(device)
+            train = train.to(device)
+            labels = labels.to(device)
 
             optimiser.zero_grad()
             predict, state1, state2 = model(train, (state_hidden1, state_context1), (state_hidden2, state_context2))
-            loss = mse(predict, labels)
+            
+            loss = F.cross_entropy(predict, labels.squeeze())
 
             state_hidden1 = state1[0].detach()
             state_context1 = state1[1].detach()
@@ -126,9 +115,6 @@ def main():
             state_context2 = state2[1].detach()
 
             loss.backward()
-
-            # Prevent exploding gradients
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
             optimiser.step()
 
             # Sum the loss from this batch into the checkpoint total

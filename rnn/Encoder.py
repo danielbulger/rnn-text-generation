@@ -1,11 +1,10 @@
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
 
-    def __init__(self, device, vocab_size, embedding_size, rnn1_size, rnn2_size):
+    def __init__(self, vocab_size, embedding_size, rnn1_size, rnn2_size):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_size)
         self.rnn1 = nn.LSTM(embedding_size, rnn1_size, 1, batch_first=True)
@@ -13,7 +12,6 @@ class Encoder(nn.Module):
         self.rnn1_hidden_size = rnn1_size
         self.rnn2_hidden_size = rnn2_size
         self.dense = nn.Linear(embedding_size + rnn1_size + rnn2_size, vocab_size)
-        self.device = device
 
     def zero_state(self, batch_size, size):
         # One for the hidden state & one for contextual state.
@@ -37,4 +35,4 @@ class Encoder(nn.Module):
         x = torch.cat([embedding, rnn1, rnn2], dim=1)
         x = self.dense(x)
 
-        return (F.softmax(x, dim=1), [hidden1, context1], [hidden2, context2])
+        return (x, [hidden1, context1], [hidden2, context2])
