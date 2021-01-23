@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 
+import pickle
 import torch
 import numpy as np
 
@@ -18,7 +19,6 @@ def parse_args():
 
 
 def read_chars(in_file):
-    import pickle
 
     with open(in_file, 'rb') as input_file:
         return pickle.load(input_file)
@@ -32,14 +32,11 @@ def main():
     characters = chars['characters']
     character_index = chars['character_index']
 
-    use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda' if use_cuda else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     model = torch.load(args.model)
     model.eval()
-
-    if use_cuda:
-        model = model.to(device)
+    model = model.to(device)
 
     output = [args.start]
 
@@ -56,13 +53,10 @@ def main():
     for x in range(args.count):
         # Stack as we need a batch dimension of 1
         current = torch.stack([make_one_hot(vocab_size, character_index[output[-1]])])
-
-        if use_cuda:
-            current = current.to(device)
+        current = current.to(device)
 
         # The soft-max probabilities
         prediction, (state_hidden1, state_context1), (state_hidden2, state_context2) = model(current, (state_hidden1, state_context1), (state_hidden2, state_context2))
-
 
         # Sample from the top N most probable predictions.
         _, top_index = torch.topk(prediction, k=10)

@@ -8,6 +8,7 @@ import multiprocessing
 
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
+from torch.utils.tensorboard import SummaryWriter
 
 from rnn.CharDataset import CharDataset
 from rnn.Encoder import Encoder
@@ -17,7 +18,7 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument('--input', type=str, required=True)
     parser.add_argument('--epochs', type=int, required=True)
-    parser.add_argument('--embedding-size', type=int, default=100)
+    parser.add_argument('--embedding-size', type=int, default=256)
     parser.add_argument('--rnn1-size', type=int, default=128)
     parser.add_argument('--rnn2-size', type=int, default=128)
     parser.add_argument('--lr', type=float, default=0.001)
@@ -85,6 +86,8 @@ def main():
         num_workers=args.workers
     )
 
+    writer = SummaryWriter(os.path.join(args.log_dir))
+
     for epoch in range(args.epochs):
 
         running_loss = 0.0
@@ -120,12 +123,17 @@ def main():
             # Sum the loss from this batch into the checkpoint total
             running_loss += loss.item()
 
-            if index != 0 and index % args.checkpoint == 0:
-                checkpoint(model, args.log_dir, "checkpoint-{}-{}.pth".format(epoch, index))
-                print('[%d,%d] loss: %.6f' % (epoch, index, running_loss / args.batch_size))
+            if index % args.checkpoint == args.checkpoint - 1:
+
+                writer.add_scalar(
+                    'training loss', running_loss, epoch * len(data_loader) + index
+                )
+
                 running_loss = 0.0
 
     checkpoint(model, args.log_dir, "final.pth")
+
+    writer.close()
 
 
 if __name__ == '__main__':

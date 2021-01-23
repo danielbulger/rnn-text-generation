@@ -21,8 +21,7 @@ class Encoder(nn.Module):
         ]
 
     def forward(self, x, prev_state1, prev_state2):
-        batch_size = x.size(0)
-
+        
         embedding = self.embedding(x)
     
         rnn1, (hidden1, context1) = self.rnn1(embedding, (prev_state1[0], prev_state1[1]))
