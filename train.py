@@ -1,5 +1,5 @@
 import os
-from argparse import ArgumentParser
+import re
 
 import pickle
 import torch
@@ -7,6 +7,9 @@ import torch.utils.data
 import multiprocessing
 
 import torch.nn.functional as F
+
+from argparse import ArgumentParser
+
 from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 
@@ -19,14 +22,15 @@ def get_args():
     parser.add_argument('--input', type=str, required=True)
     parser.add_argument('--epochs', type=int, required=True)
     parser.add_argument('--embedding-size', type=int, default=256)
-    parser.add_argument('--rnn1-size', type=int, default=128)
-    parser.add_argument('--rnn2-size', type=int, default=128)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--rnn1-size', type=int, default=512)
+    parser.add_argument('--rnn2-size', type=int, default=512)
+    parser.add_argument('--lr', type=float, default=2e-3)
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--workers', type=int)
     parser.add_argument('--log-dir', default="./log/", type=str)
     parser.add_argument('--checkpoint', default=50, type=int)
     parser.add_argument('--chars', default="./log/chars.pk", type=str)
+    parser.add_argument('--model', type=str)
     return parser.parse_args()
 
 
@@ -53,6 +57,14 @@ def write_chars(file, vocab_size, characters, character_index):
 
         pickle.dump(data, output_file)
 
+def get_checkpoint_model(model_path):
+    model = torch.load(model_path)
+    model.eval()
+    model.train()
+
+    m = re.search('(\d+).pth', model_path)
+    
+    return model, int(m.group(1)) + 1
 
 def main():
     args = get_args()
@@ -63,6 +75,9 @@ def main():
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    if torch.cuda.is_available():
+         torch.backends.cudnn.fastest = True
+
     content, vocab_size, characters, character_index = get_chars(args.input)
 
     # Write the required training data to file.
@@ -70,10 +85,15 @@ def main():
         args.chars, vocab_size, characters, character_index
     )
 
-    # The generation model.
-    model = Encoder(
-        vocab_size, args.embedding_size,  args.rnn1_size, args.rnn2_size
-    )
+    epoch = 0
+
+    # If the use has provided an existing model then use that as a checkpoint.
+    if args.model is not None:
+        model, epoch = get_checkpoint_model(args.model)
+    else:
+        model = Encoder(
+            vocab_size, args.embedding_size,  args.rnn1_size, args.rnn2_size
+        )
 
     model = model.to(device)
 
@@ -88,7 +108,7 @@ def main():
 
     writer = SummaryWriter(os.path.join(args.log_dir))
 
-    for epoch in range(args.epochs):
+    for epoch in range(epoch, args.epochs):
 
         running_loss = 0.0
 
@@ -100,6 +120,8 @@ def main():
 
         state_hidden2 = state_hidden2.to(device)
         state_context2 = state_context2.to(device)
+
+        print('Starting epoch {}...'.format(epoch + 1))
 
         for index, (train, labels) in enumerate(data_loader):
 
@@ -119,6 +141,7 @@ def main():
 
             loss.backward()
             optimiser.step()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
 
             # Sum the loss from this batch into the checkpoint total
             running_loss += loss.item()
@@ -129,7 +152,11 @@ def main():
                     'training loss', running_loss, epoch * len(data_loader) + index
                 )
 
+                
+                checkpoint(model, args.log_dir, "{}_{}.pth".format(epoch, index))
                 running_loss = 0.0
+
+        checkpoint(model, args.log_dir, "{}.pth".format(epoch))
 
     checkpoint(model, args.log_dir, "final.pth")
 

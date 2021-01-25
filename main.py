@@ -1,9 +1,11 @@
-from argparse import ArgumentParser
 
 import pickle
 import torch
 import numpy as np
+import torch.nn.functional as F
 
+from argparse import ArgumentParser
+from torch.distributions import Categorical
 from rnn.CharDataset import make_one_hot
 
 
@@ -14,6 +16,7 @@ def parse_args():
     parser.add_argument('--start', type=str, required=True)
     parser.add_argument('--count', type=int, required=True)
     parser.add_argument('--chars', type=str, required=True)
+    parser.add_argument('--temp', type=float, default=1.0)
 
     return parser.parse_args()
 
@@ -58,15 +61,15 @@ def main():
         # The soft-max probabilities
         prediction, (state_hidden1, state_context1), (state_hidden2, state_context2) = model(current, (state_hidden1, state_context1), (state_hidden2, state_context2))
 
-        # Sample from the top N most probable predictions.
-        _, top_index = torch.topk(prediction, k=10)
-        choices = top_index.tolist()
 
-        # Grab one at random.
-        choice = np.random.choice(choices[0])
+        # Scale by the temperature
+        prediction = F.softmax(prediction[0], dim=0) / args.temp
+
+        dist = Categorical(prediction)
+        index = dist.sample()
 
         # Convert the probabilities to the character
-        character = characters[choice]
+        character = characters[index]
 
         output.append(character)
 

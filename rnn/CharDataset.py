@@ -4,7 +4,7 @@ from math import floor
 
 
 def make_one_hot(vocab_size, index):
-    x = [0 for _ in range(vocab_size)]
+    x = [0] * vocab_size
     x[index] = 1
     return torch.tensor(x)
 
