@@ -1,9 +1,8 @@
 import pickle
-from math import floor
+from collections import Counter
 
 import torch
 from torch.utils import data
-from collections import Counter
 
 
 class CharDataset(data.Dataset):

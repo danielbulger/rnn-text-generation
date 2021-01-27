@@ -8,7 +8,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_size)
         self.rnn = nn.GRU(embedding_size, rnn_size, num_layers, dropout=dropout_prob, batch_first=True)
-        self.decoder = nn.Linear(embedding_size, vocab_size)
+        self.decoder = nn.Linear(rnn_size, vocab_size)
         self.num_layers = num_layers
         self.rnn_size = rnn_size
 
