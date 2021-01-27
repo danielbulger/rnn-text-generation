@@ -4,34 +4,23 @@ from torch import nn
 
 class Encoder(nn.Module):
 
-    def __init__(self, vocab_size, embedding_size, rnn1_size, rnn2_size):
+    def __init__(self, vocab_size, embedding_size, rnn_size, num_layers, dropout_prob):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_size)
-        self.rnn1 = nn.LSTM(embedding_size, rnn1_size, 1, batch_first=True)
-        self.rnn2 = nn.LSTM(rnn1_size, rnn2_size, 1, batch_first=True)
-        self.rnn1_hidden_size = rnn1_size
-        self.rnn2_hidden_size = rnn2_size
-        self.dense = nn.Linear(embedding_size + rnn1_size + rnn2_size, vocab_size)
+        self.rnn = nn.GRU(embedding_size, rnn_size, num_layers, dropout=dropout_prob, batch_first=True)
+        self.decoder = nn.Linear(embedding_size, vocab_size)
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
 
-    def zero_state(self, batch_size, size):
+    def zero_state(self, batch_size):
         # One for the hidden state & one for contextual state.
-        return [
-            torch.zeros(1, batch_size, size),
-            torch.zeros(1, batch_size, size)
-        ]
+        return torch.zeros(self.num_layers, batch_size, self.rnn_size)
 
-    def forward(self, x, prev_state1, prev_state2):
-        
-        embedding = self.embedding(x)
-    
-        rnn1, (hidden1, context1) = self.rnn1(embedding, (prev_state1[0], prev_state1[1]))
-        rnn2, (hidden2, context2) = self.rnn2(rnn1, (prev_state2[0], prev_state2[1]))
+    def forward(self, x, state):
+        x = self.embedding(x)
 
-        embedding = embedding.transpose(0, 1)[-1]
-        rnn1 = rnn1.transpose(0, 1)[-1]
-        rnn2 = rnn2.transpose(0, 1)[-1]
+        x, hidden = self.rnn(x, state)
 
-        x = torch.cat([embedding, rnn1, rnn2], dim=1)
-        x = self.dense(x)
+        x = self.decoder(x)
 
-        return (x, [hidden1, context1], [hidden2, context2])
+        return x, hidden

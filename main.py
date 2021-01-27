@@ -1,12 +1,10 @@
-
-import pickle
 import torch
-import numpy as np
 import torch.nn.functional as F
 
 from argparse import ArgumentParser
 from torch.distributions import Categorical
-from rnn.CharDataset import make_one_hot
+
+from rnn.CharDataset import CharDataset
 
 
 def parse_args():
@@ -21,19 +19,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_chars(in_file):
-
-    with open(in_file, 'rb') as input_file:
-        return pickle.load(input_file)
-
-
 def main():
     args = parse_args()
 
-    chars = read_chars(args.chars)
-    vocab_size = chars['count']
-    characters = chars['characters']
-    character_index = chars['character_index']
+    characters = CharDataset.deserialize(args.chars)
+
+    vocab_to_index = characters['vocab_to_index']
+    index_to_vocab = characters['index_to_vocab']
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -43,33 +35,25 @@ def main():
 
     output = [args.start]
 
-    state_hidden1, state_context1 = model.zero_state(1, model.rnn1_hidden_size)
-    state_hidden2, state_context2 = model.zero_state(1, model.rnn2.hidden_size)
-
-    state_hidden1 = state_hidden1.to(device)
-    state_context1 = state_context1.to(device)
-
-    state_hidden2 = state_hidden2.to(device)
-    state_context2 = state_context2.to(device)
-
+    state_hidden = model.zero_state(1).to(device)
 
     for x in range(args.count):
-        # Stack as we need a batch dimension of 1
-        current = torch.stack([make_one_hot(vocab_size, character_index[output[-1]])])
-        current = current.to(device)
+
+        current = torch.tensor([[vocab_to_index[output[-1]]]]).to(device)
 
         # The soft-max probabilities
-        prediction, (state_hidden1, state_context1), (state_hidden2, state_context2) = model(current, (state_hidden1, state_context1), (state_hidden2, state_context2))
+        prediction, state_hidden = model(current, state_hidden)
 
+        prediction = prediction[0]
 
         # Scale by the temperature
-        prediction = F.softmax(prediction[0], dim=0) / args.temp
+        prediction = F.softmax(prediction / args.temp, dim=1)
 
         dist = Categorical(prediction)
         index = dist.sample()
 
         # Convert the probabilities to the character
-        character = characters[index]
+        character = index_to_vocab[index[0].item()]
 
         output.append(character)
 
